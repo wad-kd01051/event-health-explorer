@@ -20,12 +20,17 @@ from src.snowflake_client import SnowflakeClient
 def classify_health(
     days_since_last: int,
     volume_change_rate: Optional[float],
+    events_last_30d: int = 0,
+    events_prev_30d: int = 0,
 ) -> tuple[str, str]:
     """(health_status, recommendation) 반환"""
     if days_since_last >= 90:
         return "Dead", "스토리지/설계서에서 제거 검토"
     if days_since_last >= 30:
         return "Dormant", "담당자에게 사용 여부 확인"
+    # 신규: 최근 30일엔 발생했지만 그 이전 30일 (31~60일 전) 엔 없음
+    if events_last_30d > 0 and events_prev_30d == 0:
+        return "New", "최근 출시/부활 — 추세 추적 시작"
     if volume_change_rate is not None and abs(volume_change_rate) > 3.0:
         return "Anomalous", "중복 발화/루프 여부 점검"
     if volume_change_rate is not None and volume_change_rate > 0.5:
@@ -280,6 +285,8 @@ def run_overview(
             int(row["days_since_last_event"]),
             float(row["volume_change_pct"]) / 100
                 if pd.notna(row["volume_change_pct"]) else None,
+            int(row.get("events_last_30d", 0) or 0),
+            int(row.get("events_prev_30d", 0) or 0),
         ),
         axis=1,
     )

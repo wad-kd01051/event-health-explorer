@@ -1,6 +1,25 @@
 # 🩺 Event Health Explorer
 
-GA4 이벤트 사용 현황을 동적으로 분석하는 사내 웹앱.
+GA4 / Amplitude 이벤트 사용 현황을 동적으로 분석하는 사내 웹앱.
+
+## ⚡ 2줄로 시작 (팀원용)
+
+```bash
+git clone https://github.com/wad-kd01051/event-health-explorer.git
+cd event-health-explorer && ./setup.sh
+```
+
+- 첫 실행 시 이메일만 한 번 입력 → 자동으로 가상환경/의존성/`.env` 설정
+- 브라우저 자동 열림, Snowflake SSO 로그인 팝업 뜨면 로그인
+- 두 번째부터는 `./setup.sh` 만 실행하면 바로 앱 시작
+- 종료: 터미널에서 `Ctrl+C`
+
+**요구사항**: Python 3.11+ (`brew install python@3.11` — macOS), `git`
+
+권한 필요 시 `@kd01051` 에게 GitHub Collaborator 추가 요청.
+
+---
+
 
 - **Snowflake 스키마 자동 탐지** — View 미리 만들 필요 없음
 - **dbt profiles.yml 재사용** — 별도 인증 설정 불필요

@@ -105,10 +105,21 @@ def list_category_tabs(spreadsheet_url: str) -> List[str]:
 
 
 _EVENT_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{2,59}$")
-# 헤더가 "eventName", "event_name", "eventName.1" 등 중복 suffix 까지 매칭
+# 헤더 — "eventName", "event_name", "eventName(Amplitude)", "eventName(GA)", "eventName.1" 등
 _EVENT_NAME_HEADER_RE = re.compile(
-    r"^event\s*_?\s*name(\s*\.\d+)?$", re.IGNORECASE
+    r"^event\s*_?\s*name\s*(\([^)]*\))?\s*(\.\d+)?$", re.IGNORECASE
 )
+_AMPLITUDE_LABEL_RE = re.compile(r"amplitude", re.IGNORECASE)
+_GA4_LABEL_RE = re.compile(r"\bga4?\b|google", re.IGNORECASE)
+
+
+def _classify_header_label(label: str) -> Optional[str]:
+    """헤더 텍스트의 (Amplitude) / (GA) 힌트로 소스 판별."""
+    if _AMPLITUDE_LABEL_RE.search(label):
+        return "amplitude"
+    if _GA4_LABEL_RE.search(label):
+        return "ga4"
+    return None
 
 
 def _is_valid_event_name(s: str) -> bool:
@@ -130,20 +141,38 @@ def _matches_source_convention(name: str, source: str) -> bool:
     return has_dbl if source == "amplitude" else not has_dbl
 
 
-def _find_event_name_col_indices(df_raw: pd.DataFrame, max_header_rows: int = 10) -> List[int]:
-    """앞 N 행을 훑어 `eventName` / `event_name` 텍스트가 있는 컬럼 인덱스 리스트를
-    위치 오름차순 중복 없이 반환. 탭별로 헤더 행 위치가 달라도 대응."""
-    found: List[int] = []
+def _find_event_name_columns(
+    df_raw: pd.DataFrame, max_header_rows: int = 10
+) -> List[Tuple[int, str]]:
+    """앞 N 행에서 eventName 계열 셀 위치를 `(col_idx, label)` 튜플로 반환."""
+    seen: Dict[int, str] = {}
     for row_idx in range(min(max_header_rows, len(df_raw))):
         for col_idx in range(df_raw.shape[1]):
             val = df_raw.iat[row_idx, col_idx]
             if pd.isna(val):
                 continue
-            if _EVENT_NAME_HEADER_RE.match(str(val).strip()):
-                if col_idx not in found:
-                    found.append(col_idx)
-    found.sort()
-    return found
+            s = str(val).strip()
+            if _EVENT_NAME_HEADER_RE.match(s):
+                if col_idx not in seen:
+                    seen[col_idx] = s
+    return sorted(seen.items())
+
+
+def _pick_source_columns(
+    cols_with_label: List[Tuple[int, str]], source: str
+) -> List[int]:
+    """힌트 우선, 없으면 위치 기반으로 소스별 대상 컬럼 인덱스 리스트 반환."""
+    hinted = [c for c, l in cols_with_label if _classify_header_label(l) == source]
+    if hinted:
+        return hinted
+    # fallback — 힌트 없는 컬럼들 중 위치 기반
+    unhinted = [c for c, l in cols_with_label if _classify_header_label(l) is None]
+    return unhinted[:1] if source == "amplitude" else unhinted[1:]
+
+
+# 하위 호환용 — 기존 호출부가 쓸 수 있음
+def _find_event_name_col_indices(df_raw, max_header_rows=10):
+    return [c for c, _ in _find_event_name_columns(df_raw, max_header_rows)]
 
 
 def load_event_details(
@@ -171,10 +200,11 @@ def load_event_details(
             continue
         tab = ws.title
 
-        en_col_idxs = _find_event_name_col_indices(df)
-        if not en_col_idxs:
+        cols_with_label = _find_event_name_columns(df)
+        if not cols_with_label:
             continue
 
+        en_col_idxs = [c for c, _ in cols_with_label]
         # 헤더 행 위치 탐지 (eventName 이 등장한 row 중 첫 번째)
         header_row = 0
         for r in range(min(10, len(df))):
@@ -185,13 +215,12 @@ def load_event_details(
                 header_row = r
                 break
 
-        # 컬럼명: 헤더 행의 셀 값 (없으면 col_{idx})
         col_names = {}
         for c in range(df.shape[1]):
             hv = df.iat[header_row, c] if header_row < len(df) else None
             col_names[c] = str(hv).strip() if pd.notna(hv) else f"col_{c}"
 
-        target_idxs = en_col_idxs[:1] if source == "amplitude" else en_col_idxs[1:]
+        target_idxs = _pick_source_columns(cols_with_label, source)
 
         for i in range(header_row + 1, len(df)):
             for idx in target_idxs:
@@ -240,11 +269,11 @@ def load_events_by_category(
         if df.empty:
             continue
 
-        en_col_idxs = _find_event_name_col_indices(df)
-        if not en_col_idxs:
+        cols_with_label = _find_event_name_columns(df)
+        if not cols_with_label:
             continue
 
-        target_idxs = en_col_idxs[:1] if source == "amplitude" else en_col_idxs[1:]
+        target_idxs = _pick_source_columns(cols_with_label, source)
 
         for idx in target_idxs:
             for val in df.iloc[:, idx].dropna():

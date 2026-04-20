@@ -44,14 +44,15 @@ st.set_page_config(
 STATUS_COLORS = {
     "Active":    "#22c55e",
     "Growing":   "#3b82f6",
+    "New":       "#06b6d4",
     "Declining": "#f59e0b",
     "Dormant":   "#a1a1aa",
     "Dead":      "#ef4444",
     "Anomalous": "#a855f7",
 }
 STATUS_EMOJI = {
-    "Active": "✅", "Growing": "📈", "Declining": "📉",
-    "Dormant": "💤", "Dead": "⚰️", "Anomalous": "⚠️",
+    "Active": "✅", "Growing": "📈", "New": "🆕",
+    "Declining": "📉", "Dormant": "💤", "Dead": "⚰️", "Anomalous": "⚠️",
 }
 
 
@@ -418,8 +419,13 @@ with tab1:
         m2.metric("30일 발생", f"{int(row['events_last_30d']):,}")
         m3.metric("30일 UU", f"{int(row['users_last_30d']):,}")
         change = row["volume_change_pct"]
-        m4.metric("증감률",
-                  f"{change:+.1f}%" if pd.notna(change) else "N/A")
+        if pd.notna(change):
+            change_display = f"{change:+.1f}%"
+        elif row.get("health_status") == "New":
+            change_display = "🆕 NEW"
+        else:
+            change_display = "N/A"
+        m4.metric("증감률", change_display)
         m5.metric("마지막 발생", str(row["last_seen_date"]))
         m6.metric("미발생 일수", f"{int(row['days_since_last_event'])}일")
 
