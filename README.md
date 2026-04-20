@@ -2,21 +2,52 @@
 
 GA4 / Amplitude 이벤트 사용 현황을 동적으로 분석하는 사내 웹앱.
 
-## ⚡ 2줄로 시작 (팀원용)
+## ⚡ 설치 (본인 환경에 편한 방법 택 1)
 
+### 🟢 A. 가장 쉬움 — 한 줄 (curl)
+터미널 열고 복붙:
+```bash
+curl -sSL https://raw.githubusercontent.com/wad-kd01051/event-health-explorer/main/bootstrap.sh | bash
+```
+이 한 줄이 레포 다운로드 + 가상환경 + 의존성 + `.env` 생성 + 앱 실행까지 전부 수행.
+
+### 🟡 B. git clone
 ```bash
 git clone https://github.com/wad-kd01051/event-health-explorer.git
 cd event-health-explorer && ./setup.sh
 ```
 
-- 첫 실행 시 이메일만 한 번 입력 → 자동으로 가상환경/의존성/`.env` 설정
-- 브라우저 자동 열림, Snowflake SSO 로그인 팝업 뜨면 로그인
-- 두 번째부터는 `./setup.sh` 만 실행하면 바로 앱 시작
-- 종료: 터미널에서 `Ctrl+C`
+### 🟡 C. ZIP 다운로드 (git 몰라도 OK)
+1. 이 페이지 상단 초록색 **Code** 버튼 → **Download ZIP**
+2. 압축 해제
+3. 터미널에서 폴더로 이동:
+   ```bash
+   cd ~/Downloads/event-health-explorer-main
+   ./setup.sh
+   ```
 
-**요구사항**: Python 3.11+ (`brew install python@3.11` — macOS), `git`
+---
 
-권한 필요 시 `@kd01051` 에게 GitHub Collaborator 추가 요청.
+## 실행 후 흐름 (공통)
+
+1. 첫 실행 시 **이메일 한 번 입력** (`YOUR_ID@catchtable.co.kr`)
+2. 브라우저 자동 열림 → **Snowflake SSO 로그인 팝업**에서 로그인
+3. 두 번째부터는 `./setup.sh` 만 실행 → 바로 앱 시작
+4. 종료: `Ctrl+C`
+
+## 요구사항
+- **Python 3.11+** — 없으면:
+  - macOS: `brew install python@3.11`
+  - Windows: https://www.python.org/downloads/ 에서 설치
+- **Snowflake 계정** (사내 SSO 로그인 가능해야 함)
+- **Windows** 는 Git Bash 에서 `./setup.sh` 실행
+
+### 자주 막히는 지점
+| 증상 | 해결 |
+|---|---|
+| `permission denied: ./setup.sh` | `chmod +x setup.sh` 후 재시도 |
+| `python3.11: command not found` | `brew install python@3.11` |
+| `does not exist or not authorized` (쿼리 시) | Snowflake 데이터 접근 권한 없음 — 데이터팀 문의 |
 
 ---
 

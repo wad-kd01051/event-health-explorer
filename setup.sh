@@ -12,6 +12,13 @@ cd "$(dirname "$0")"
 echo "🩺 Event Health Explorer"
 echo "========================"
 
+# app.py 가 없으면 잘못된 디렉터리에서 실행 중
+if [ ! -f "app.py" ]; then
+    echo "❌ 이 스크립트는 event-health-explorer 폴더 안에서 실행해주세요"
+    echo "   (git clone 또는 ZIP 압축 해제 후 'cd event-health-explorer')"
+    exit 1
+fi
+
 # ── Python 3.11 확인 ──
 PYTHON_BIN=""
 for cand in python3.11 python3.12 python3; do
