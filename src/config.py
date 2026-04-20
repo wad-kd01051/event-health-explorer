@@ -124,6 +124,7 @@ class SheetsConfig:
     spreadsheet_url: Optional[str] = None
     worksheet_name: Optional[str] = None
     service_account_json: Optional[str] = None
+    oauth_client_json: Optional[str] = None
 
 
 @dataclass
@@ -323,6 +324,7 @@ def load_config(
         spreadsheet_url=os.getenv("SHEETS_URL"),
         worksheet_name=os.getenv("SHEETS_WORKSHEET"),
         service_account_json=os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"),
+        oauth_client_json=os.getenv("GOOGLE_OAUTH_CLIENT_JSON"),
     )
 
     return AppConfig(snowflake=sf, sheets=sheets)

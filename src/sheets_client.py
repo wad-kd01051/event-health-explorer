@@ -29,8 +29,18 @@ import pandas as pd
 _XML_ILLEGAL_CTRL = re.compile(rb"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
-def _fetch_workbook(spreadsheet_url: str):
-    """xlsx 다운로드 + 불법 제어문자 sanitize 후 openpyxl workbook 반환."""
+def _rows_to_df(rows) -> pd.DataFrame:
+    """row iterable → header=None DataFrame (pad + object dtype)."""
+    rows = list(rows)
+    if not rows:
+        return pd.DataFrame()
+    max_cols = max((len(r) for r in rows), default=0)
+    padded = [list(r) + [None] * (max_cols - len(r)) for r in rows]
+    return pd.DataFrame(padded).astype(object)
+
+
+def _fetch_via_xlsx(spreadsheet_url: str) -> Dict[str, pd.DataFrame]:
+    """공개 시트: xlsx export 다운로드 → 탭별 DataFrame dict."""
     import openpyxl
 
     sid = _extract_sheet_id(spreadsheet_url)
@@ -47,20 +57,109 @@ def _fetch_workbook(spreadsheet_url: str):
                 body = _XML_ILLEGAL_CTRL.sub(b"", body)
             zo.writestr(info, body)
     dst.seek(0)
-    return openpyxl.load_workbook(dst, data_only=True, read_only=True)
+    wb = openpyxl.load_workbook(dst, data_only=True, read_only=True)
+
+    out: Dict[str, pd.DataFrame] = {}
+    for ws in wb.worksheets:
+        out[ws.title] = _rows_to_df(ws.iter_rows(values_only=True))
+    return out
 
 
-def _sheet_to_dataframe(ws) -> pd.DataFrame:
-    """openpyxl worksheet → header=None 방식 DataFrame."""
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return pd.DataFrame()
-    # None → NaN 변환을 위해 DataFrame 생성
-    max_cols = max((len(r) for r in rows), default=0)
-    padded = [list(r) + [None] * (max_cols - len(r)) for r in rows]
-    df = pd.DataFrame(padded)
-    # 문자열 dtype 로 통일
-    return df.astype(object)
+_SHEETS_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+]
+
+
+def _gspread_to_dict(gc, spreadsheet_url: str) -> Dict[str, pd.DataFrame]:
+    """gspread 인증 객체로 시트 전체 → 탭별 DataFrame dict."""
+    sh = gc.open_by_url(spreadsheet_url)
+    out: Dict[str, pd.DataFrame] = {}
+    for ws in sh.worksheets():
+        try:
+            values = ws.get_all_values()
+        except Exception:
+            values = []
+        out[ws.title] = _rows_to_df(values)
+    return out
+
+
+def _fetch_via_service_account(
+    spreadsheet_url: str, service_account_info: str,
+) -> Dict[str, pd.DataFrame]:
+    """비공개 시트 + Service Account (자동화/서버 환경용)."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    if Path(service_account_info).exists():
+        creds = Credentials.from_service_account_file(
+            service_account_info, scopes=_SHEETS_SCOPES,
+        )
+    else:
+        creds = Credentials.from_service_account_info(
+            json.loads(service_account_info), scopes=_SHEETS_SCOPES,
+        )
+    gc = gspread.authorize(creds)
+    return _gspread_to_dict(gc, spreadsheet_url)
+
+
+def _fetch_via_user_oauth(
+    spreadsheet_url: str,
+    client_secrets_path: str,
+    token_cache_path: Optional[str] = None,
+) -> Dict[str, pd.DataFrame]:
+    """비공개 시트 + 사용자 본인 Google OAuth (데스크톱, 브라우저 팝업).
+    catchtable 구성원이면 본인 Google 계정으로 로그인 → 시트 권한은 계정에 따름.
+    """
+    import gspread
+
+    cache = token_cache_path or str(
+        Path.home() / ".config" / "event-health-explorer" / "token.json"
+    )
+    Path(cache).parent.mkdir(parents=True, exist_ok=True)
+
+    gc = gspread.oauth(
+        credentials_filename=client_secrets_path,
+        authorized_user_filename=cache,
+        scopes=_SHEETS_SCOPES,
+    )
+    return _gspread_to_dict(gc, spreadsheet_url)
+
+
+def _fetch_via_gcloud_adc(spreadsheet_url: str) -> Dict[str, pd.DataFrame]:
+    """gcloud ADC — 사용자가 `gcloud auth application-default login` 해놓은 상태.
+    GCP 콘솔에 OAuth Client 만들 필요 없음.
+    """
+    import gspread
+    from google.auth import default
+
+    creds, _ = default(scopes=_SHEETS_SCOPES)
+    gc = gspread.authorize(creds)
+    return _gspread_to_dict(gc, spreadsheet_url)
+
+
+def _fetch_workbook(
+    spreadsheet_url: str,
+    service_account_info: Optional[str] = None,
+    oauth_client_path: Optional[str] = None,
+    try_gcloud_adc: bool = True,
+) -> Dict[str, pd.DataFrame]:
+    """인증 우선순위:
+    1. Service Account (명시)  — 자동화/서버
+    2. OAuth User (client_secret.json 있으면) — 브라우저 로그인
+    3. gcloud ADC — 사용자가 gcloud 로그인해놓은 경우
+    4. 공개 xlsx export — 시트가 '링크 있는 누구나'
+    """
+    if service_account_info:
+        return _fetch_via_service_account(spreadsheet_url, service_account_info)
+    if oauth_client_path and Path(oauth_client_path).exists():
+        return _fetch_via_user_oauth(spreadsheet_url, oauth_client_path)
+    if try_gcloud_adc:
+        try:
+            return _fetch_via_gcloud_adc(spreadsheet_url)
+        except Exception:
+            pass
+    return _fetch_via_xlsx(spreadsheet_url)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -78,11 +177,17 @@ def _extract_sheet_id(spreadsheet_url: str) -> str:
     return m.group(1)
 
 
-def list_category_tabs(spreadsheet_url: str) -> List[str]:
-    """
-    xlsx export 로 전체 workbook 메타만 받아 visible 한 카테고리 탭 이름을 반환.
-    `"03. 메인_신규로그설계"` 처럼 숫자 접두어가 있는 탭만 카테고리로 간주.
-    """
+def list_category_tabs(
+    spreadsheet_url: str,
+    service_account_info: Optional[str] = None,
+    oauth_client_path: Optional[str] = None,
+) -> List[str]:
+    """숫자 접두어 탭만 반환. 인증 방식 자동 분기."""
+    if service_account_info or (oauth_client_path and Path(oauth_client_path).exists()):
+        wb = _fetch_workbook(spreadsheet_url, service_account_info, oauth_client_path)
+        return [name for name in wb if _CATEGORY_TAB_RE.match(name)]
+
+    # 공개 시트용 경량 경로 — workbook.xml 만 파싱 (데이터는 안 받음)
     sid = _extract_sheet_id(spreadsheet_url)
     xlsx_url = f"https://docs.google.com/spreadsheets/d/{sid}/export?format=xlsx"
     with urllib.request.urlopen(xlsx_url) as r:
@@ -179,6 +284,8 @@ def load_event_details(
     spreadsheet_url: str,
     tab_names: List[str],
     source: str = "amplitude",
+    service_account_info: Optional[str] = None,
+    oauth_client_path: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     이벤트별 전체 행 데이터를 DataFrame 으로 반환.
@@ -187,18 +294,17 @@ def load_event_details(
     rows: List[dict] = []
 
     try:
-        wb = _fetch_workbook(spreadsheet_url)
+        wb = _fetch_workbook(spreadsheet_url, service_account_info, oauth_client_path)
     except Exception:
         return pd.DataFrame()
 
     tab_set = set(tab_names)
-    for ws in wb.worksheets:
-        if ws.title not in tab_set:
+    for title, df in wb.items():
+        if title not in tab_set:
             continue
-        df = _sheet_to_dataframe(ws)
         if df.empty:
             continue
-        tab = ws.title
+        tab = title
 
         cols_with_label = _find_event_name_columns(df)
         if not cols_with_label:
@@ -244,29 +350,23 @@ def load_events_by_category(
     spreadsheet_url: str,
     tab_names: List[str],
     source: str = "amplitude",
+    service_account_info: Optional[str] = None,
+    oauth_client_path: Optional[str] = None,
 ) -> Tuple[Set[str], Dict[str, List[str]]]:
     """
     설계서 카테고리 탭들에서 해당 소스의 이벤트명 집합 + 이벤트→카테고리 매핑 반환.
-
-    탭마다 컬럼 위치가 달라서 "eventName 계열 헤더 + 네이밍 컨벤션" 조합으로 탐지:
-      1) `eventName`/`event_name`/`eventName.N` 헤더 컬럼 전부 수집
-      2) 각 값의 `__` 포함 여부로 Amplitude/GA4 판별 (요청 소스와 일치할 때만 포함)
-    이러면 탭별 컬럼 순서가 달라도 정확히 분류됨.
     """
     events: Set[str] = set()
     categories_of: Dict[str, List[str]] = {}
 
     try:
-        wb = _fetch_workbook(spreadsheet_url)
+        wb = _fetch_workbook(spreadsheet_url, service_account_info, oauth_client_path)
     except Exception:
         return events, categories_of
 
     tab_set = set(tab_names)
-    for ws in wb.worksheets:
-        if ws.title not in tab_set:
-            continue
-        df = _sheet_to_dataframe(ws)
-        if df.empty:
+    for title, df in wb.items():
+        if title not in tab_set or df.empty:
             continue
 
         cols_with_label = _find_event_name_columns(df)
@@ -285,7 +385,7 @@ def load_events_by_category(
                 if not _matches_source_convention(ev, source):
                     continue
                 events.add(ev)
-                categories_of.setdefault(ev, []).append(ws.title)
+                categories_of.setdefault(ev, []).append(title)
 
     return events, categories_of
 

@@ -111,22 +111,36 @@ def get_design_doc(url, worksheet, sa_json):
     return load_design_doc(url, worksheet, sa_json)
 
 
+def _sheet_auth(cfg):
+    """시트 인증용 kwargs (Service Account or OAuth Client)."""
+    return {
+        "service_account_info": cfg.sheets.service_account_json,
+        "oauth_client_path": cfg.sheets.oauth_client_json,
+    }
+
+
 @st.cache_data(ttl=3600, show_spinner="📂 카테고리 탭 목록 조회 중...")
-def get_category_tabs(url):
-    return list_category_tabs(url)
+def get_category_tabs(url, _sa, _oauth):
+    return list_category_tabs(
+        url, service_account_info=_sa, oauth_client_path=_oauth,
+    )
 
 
 @st.cache_data(ttl=3600, show_spinner="📂 선택 카테고리의 이벤트 목록 로드 중...")
-def get_events_for_categories(url, tabs_tuple, source_key):
+def get_events_for_categories(url, tabs_tuple, source_key, _sa, _oauth):
     events, mapping = load_events_by_category(
         url, list(tabs_tuple), source=source_key,
+        service_account_info=_sa, oauth_client_path=_oauth,
     )
     return events, mapping
 
 
 @st.cache_data(ttl=3600, show_spinner="📖 이벤트 정의/설명 로드 중...")
-def get_event_details(url, tabs_tuple, source_key):
-    return load_event_details(url, list(tabs_tuple), source=source_key)
+def get_event_details(url, tabs_tuple, source_key, _sa, _oauth):
+    return load_event_details(
+        url, list(tabs_tuple), source=source_key,
+        service_account_info=_sa, oauth_client_path=_oauth,
+    )
 
 
 def status_badge(status: str) -> str:
@@ -275,7 +289,11 @@ if not cfg.sheets.spreadsheet_url:
     st.stop()
 
 try:
-    all_tabs = get_category_tabs(cfg.sheets.spreadsheet_url)
+    all_tabs = get_category_tabs(
+        cfg.sheets.spreadsheet_url,
+        cfg.sheets.service_account_json,
+        cfg.sheets.oauth_client_json,
+    )
 except Exception as e:
     st.error(f"설계서 카테고리 탭 조회 실패: {e}")
     st.stop()
@@ -294,7 +312,8 @@ event_category_map: dict = {}
 if selected_cats:
     try:
         events, event_category_map = get_events_for_categories(
-            cfg.sheets.spreadsheet_url, tuple(selected_cats), source_key
+            cfg.sheets.spreadsheet_url, tuple(selected_cats), source_key,
+            cfg.sheets.service_account_json, cfg.sheets.oauth_client_json,
         )
     except Exception as e:
         st.error(f"카테고리 이벤트 로드 실패: {e}")
@@ -587,6 +606,7 @@ with tab4:
         try:
             df_defs = get_event_details(
                 cfg.sheets.spreadsheet_url, tuple(selected_cats), source_key,
+                cfg.sheets.service_account_json, cfg.sheets.oauth_client_json,
             )
         except Exception as e:
             st.error(f"설계서 상세 로드 실패: {e}")
