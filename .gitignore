@@ -1,0 +1,40 @@
+# ─── 민감 정보 (커밋 금지) ───
+.env
+.env.local
+.env.*.local
+.streamlit/secrets.toml
+*.pem
+*.key
+*-service-account*.json
+
+# ─── 가상환경 ───
+.venv/
+venv/
+env/
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ─── IDE ───
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+
+# ─── 로그/임시 ───
+*.log
+logs/
+tmp/
+temp/

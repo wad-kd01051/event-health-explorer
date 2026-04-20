@@ -1,0 +1,9 @@
+# Streamlit in Snowflake 배포용 패키지 목록
+# Snowsight → Streamlit 앱 생성 시 "Packages" 드롭다운에서 아래 항목을 추가하세요.
+# (Snowflake Anaconda 채널에 있는 것만 사용 가능)
+streamlit
+pandas
+plotly
+pyyaml
+# snowflake-snowpark-python 은 SiS 환경에 기본 탑재됨
+# snowflake-connector-python, python-dotenv, gspread, google-auth 는 SiS에선 불필요
