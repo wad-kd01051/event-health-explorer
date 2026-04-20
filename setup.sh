@@ -94,7 +94,7 @@ fi
 # ── Service Account JSON 확보 (설계서 접근용) ──
 # kd01051 님이 Google Drive 에 업로드 후 파일 ID 를 여기에 입력.
 # 파일 공유 설정: "제한됨" (Catchtable 내부만) 유지할 것.
-SA_DRIVE_FILE_ID="1_0hK6u1U-0sq8Uojg4woaGLtjfiUlJH6UDc1QLbo7Ls"
+SA_DRIVE_FILE_ID="1KTyuvO3QCC3uQjquRuYPkGxbmXBwon62"
 SA_FILE="service-account.json"
 
 if [ ! -f "$SA_FILE" ] && [ -n "$SA_DRIVE_FILE_ID" ]; then
