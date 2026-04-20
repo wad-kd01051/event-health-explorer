@@ -45,3 +45,7 @@ service-account.json
 client_secret.json
 *.json.bak
 gen-lang-*.json
+
+# 배포 번들 산출물 (make-bundle.sh)
+event-health-explorer-*.tar.gz
+.venv-bundle/
