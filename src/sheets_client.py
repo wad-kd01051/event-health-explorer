@@ -107,21 +107,31 @@ def _fetch_via_user_oauth(
     spreadsheet_url: str,
     client_secrets_path: str,
     token_cache_path: Optional[str] = None,
+    oauth_port: int = 8080,
 ) -> Dict[str, pd.DataFrame]:
-    """비공개 시트 + 사용자 본인 Google OAuth (데스크톱, 브라우저 팝업).
+    """비공개 시트 + 사용자 본인 Google OAuth (브라우저 팝업).
     catchtable 구성원이면 본인 Google 계정으로 로그인 → 시트 권한은 계정에 따름.
+
+    Web OAuth 클라이언트는 redirect_uri 정확 매칭이 필수이므로 고정 포트 사용.
+    GCP 콘솔의 OAuth Client 에 `http://localhost:{oauth_port}/` 등록 필요.
     """
     import gspread
+    from google_auth_oauthlib.flow import InstalledAppFlow
 
     cache = token_cache_path or str(
         Path.home() / ".config" / "event-health-explorer" / "token.json"
     )
     Path(cache).parent.mkdir(parents=True, exist_ok=True)
 
+    def _fixed_port_flow(client_config, scopes):
+        flow = InstalledAppFlow.from_client_config(client_config, scopes)
+        return flow.run_local_server(port=oauth_port)
+
     gc = gspread.oauth(
         credentials_filename=client_secrets_path,
         authorized_user_filename=cache,
         scopes=_SHEETS_SCOPES,
+        flow=_fixed_port_flow,
     )
     return _gspread_to_dict(gc, spreadsheet_url)
 

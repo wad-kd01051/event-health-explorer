@@ -37,4 +37,11 @@ Thumbs.db
 *.log
 logs/
 tmp/
-temp/
+temp/client_secret.json
+client_secret.json
+
+# Google 인증 파일 (절대 커밋 금지)
+service-account.json
+client_secret.json
+*.json.bak
+gen-lang-*.json
