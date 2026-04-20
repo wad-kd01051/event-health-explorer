@@ -58,7 +58,29 @@ echo "✅ 의존성 OK"
 if [ ! -f ".env" ]; then
     echo ""
     echo "⚙️  .env 를 처음 만듭니다"
-    read -r -p "본인 이메일 (예: hong@catchtable.co.kr): " USER_EMAIL
+
+    # curl | bash 환경 대응: /dev/tty 를 FD 3 에 열어서 사용
+    if [ -n "$EVENT_HEALTH_EMAIL" ]; then
+        USER_EMAIL="$EVENT_HEALTH_EMAIL"
+        echo "📝 환경변수 EVENT_HEALTH_EMAIL 사용: $USER_EMAIL"
+    elif exec 3< /dev/tty 2>/dev/null; then
+        printf "본인 이메일 (예: hong@catchtable.co.kr): "
+        IFS= read -r USER_EMAIL <&3
+        exec 3<&-
+    else
+        echo "❌ 대화형 입력이 불가능한 환경입니다."
+        echo "   아래 중 하나로 실행해주세요:"
+        echo "   1) 터미널에서 직접:   ./setup.sh"
+        echo "   2) 환경변수로 지정:"
+        echo "      curl ... | EVENT_HEALTH_EMAIL=you@catchtable.co.kr bash"
+        exit 1
+    fi
+
+    if [ -z "$USER_EMAIL" ]; then
+        echo "❌ 이메일이 입력되지 않았습니다"
+        exit 1
+    fi
+
     cp .env.example .env
     # macOS(BSD sed) / Linux(GNU sed) 양쪽 호환
     if sed --version >/dev/null 2>&1; then
