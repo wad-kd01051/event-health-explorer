@@ -45,19 +45,15 @@ pip install -q -r requirements.txt
 touch .venv-bundle/.deps_ok
 deactivate
 
-# ── 번들링 (.venv 이름으로 리네이밍) ──
-echo "📁 패키징..."
+# ── 번들링 (임시 디렉터리에 복사 후 tar) ──
+echo "📁 파일 복사..."
+TMPDIR_BUILD=$(mktemp -d)
+TARGET_DIR="$TMPDIR_BUILD/$BUNDLE_NAME"
+mkdir -p "$TARGET_DIR"
 
-# 임시로 .venv-bundle → .venv 심볼릭 (번들 안에선 .venv 로 보이게)
-BACKUP_VENV=""
-if [ -d ".venv" ]; then
-    echo "   기존 .venv 임시 백업"
-    BACKUP_VENV=".venv.backup.$$"
-    mv .venv "$BACKUP_VENV"
-fi
-mv .venv-bundle .venv
-
-tar --exclude='.git' \
+# 현재 프로젝트 → 임시 타깃 (제외할 것들 제외)
+rsync -a \
+    --exclude='.git' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='.DS_Store' \
@@ -69,19 +65,19 @@ tar --exclude='.git' \
     --exclude='logs' \
     --exclude='tmp' \
     --exclude='*.tar.gz' \
-    --exclude='event-health-explorer' \
     --exclude='make-bundle.sh' \
-    -czf "$OUTPUT" \
-    --transform "s|^\.|$BUNDLE_NAME|" \
-    .
+    --exclude='.venv' \
+    ./ "$TARGET_DIR/"
 
-# .venv 원복
-mv .venv .venv-bundle
-rm -rf .venv-bundle   # 빌드용 venv 는 불필요하면 삭제 (유지 원하면 이 줄 지우기)
-if [ -n "$BACKUP_VENV" ]; then
-    mv "$BACKUP_VENV" .venv
-    echo "   기존 .venv 복원 완료"
-fi
+# .venv-bundle → .venv 이름으로 번들 안에서 사용
+mv "$TARGET_DIR/.venv-bundle" "$TARGET_DIR/.venv"
+
+echo "📦 tar.gz 압축..."
+tar -czf "$OUTPUT" -C "$TMPDIR_BUILD" "$BUNDLE_NAME"
+
+# 정리
+rm -rf "$TMPDIR_BUILD"
+rm -rf .venv-bundle
 
 # ── 결과 ──
 SIZE=$(du -h "$OUTPUT" | cut -f1)
