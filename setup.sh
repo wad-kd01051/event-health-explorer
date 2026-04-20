@@ -97,7 +97,7 @@ fi
 SA_DRIVE_FILE_ID="1_0hK6u1U-0sq8Uojg4woaGLtjfiUlJH6UDc1QLbo7Ls"
 SA_FILE="service-account.json"
 
-if [ ! -f "$SA_FILE" ] && [ "$SA_DRIVE_FILE_ID" != "1_0hK6u1U-0sq8Uojg4woaGLtjfiUlJH6UDc1QLbo7Ls" ]; then
+if [ ! -f "$SA_FILE" ] && [ -n "$SA_DRIVE_FILE_ID" ]; then
     echo ""
     echo "🔑 Service Account JSON 이 필요합니다 (설계서 Google Sheets 접근용)"
     echo ""
