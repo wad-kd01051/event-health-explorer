@@ -91,6 +91,87 @@ if [ ! -f ".env" ]; then
     echo "✅ .env 생성 완료 ($USER_EMAIL)"
 fi
 
+# ── Service Account JSON 확보 (설계서 접근용) ──
+# kd01051 님이 Google Drive 에 업로드 후 파일 ID 를 여기에 입력.
+# 파일 공유 설정: "제한됨" (Catchtable 내부만) 유지할 것.
+SA_DRIVE_FILE_ID="1_0hK6u1U-0sq8Uojg4woaGLtjfiUlJH6UDc1QLbo7Ls"
+SA_FILE="service-account.json"
+
+if [ ! -f "$SA_FILE" ] && [ "$SA_DRIVE_FILE_ID" != "1_0hK6u1U-0sq8Uojg4woaGLtjfiUlJH6UDc1QLbo7Ls" ]; then
+    echo ""
+    echo "🔑 Service Account JSON 이 필요합니다 (설계서 Google Sheets 접근용)"
+    echo ""
+
+    DRIVE_URL="https://drive.google.com/uc?export=download&id=$SA_DRIVE_FILE_ID"
+    VIEW_URL="https://drive.google.com/file/d/$SA_DRIVE_FILE_ID/view"
+
+    # macOS 에서는 Downloads 폴더 자동 감지
+    DOWNLOADS_DIR="${HOME}/Downloads"
+
+    # 1) 기존에 받아놓은 파일 자동 감지
+    for existing in "$DOWNLOADS_DIR"/service-account*.json "$DOWNLOADS_DIR"/gen-lang-*.json "$DOWNLOADS_DIR"/*-service-account-*.json; do
+        if [ -f "$existing" ]; then
+            echo "📦 Downloads 폴더에서 발견: $existing"
+            cp "$existing" "$SA_FILE"
+            echo "✅ $SA_FILE 복사 완료"
+            break
+        fi
+    done
+
+    # 2) 아직 없으면 브라우저 열어서 다운로드 유도
+    if [ ! -f "$SA_FILE" ]; then
+        echo "👉 다운로드 링크를 브라우저로 엽니다..."
+        sleep 1
+        if command -v open &>/dev/null; then
+            open "$VIEW_URL"
+        elif command -v xdg-open &>/dev/null; then
+            xdg-open "$VIEW_URL"
+        else
+            echo "   수동 오픈: $VIEW_URL"
+        fi
+
+        echo ""
+        echo "   1) 본인 Google 계정(@catchtable.co.kr) 로 로그인"
+        echo "   2) 우측 상단 '다운로드' 아이콘 클릭"
+        echo "   3) 다운로드된 JSON 파일이 ~/Downloads/ 에 저장됨"
+        echo ""
+
+        # 사용자 입력 대기 (curl|bash 대응)
+        if exec 3< /dev/tty 2>/dev/null; then
+            printf "다운로드 완료했으면 Enter 를 누르세요: "
+            IFS= read -r _ <&3
+            exec 3<&-
+        fi
+
+        # Downloads 에서 다시 탐색
+        for existing in "$DOWNLOADS_DIR"/service-account*.json "$DOWNLOADS_DIR"/gen-lang-*.json "$DOWNLOADS_DIR"/*-service-account-*.json; do
+            if [ -f "$existing" ]; then
+                mv "$existing" "$SA_FILE"
+                echo "✅ $SA_FILE 로 이동 완료"
+                break
+            fi
+        done
+    fi
+
+    if [ ! -f "$SA_FILE" ]; then
+        echo "❌ $SA_FILE 을 찾을 수 없습니다."
+        echo "   수동으로 $(pwd)/$SA_FILE 에 저장한 뒤 다시 실행:  ./setup.sh"
+        exit 1
+    fi
+
+    # .env 에 SA 경로 활성화
+    if grep -q "^# GOOGLE_SERVICE_ACCOUNT_JSON=" .env; then
+        if sed --version >/dev/null 2>&1; then
+            sed -i "s|^# GOOGLE_SERVICE_ACCOUNT_JSON=.*|GOOGLE_SERVICE_ACCOUNT_JSON=service-account.json|" .env
+        else
+            sed -i "" "s|^# GOOGLE_SERVICE_ACCOUNT_JSON=.*|GOOGLE_SERVICE_ACCOUNT_JSON=service-account.json|" .env
+        fi
+        echo "✅ .env 의 GOOGLE_SERVICE_ACCOUNT_JSON 활성화"
+    elif ! grep -q "^GOOGLE_SERVICE_ACCOUNT_JSON=" .env; then
+        echo "GOOGLE_SERVICE_ACCOUNT_JSON=service-account.json" >> .env
+    fi
+fi
+
 # ── 실행 ──
 echo ""
 echo "🚀 앱 실행 — 브라우저가 자동으로 열립니다"
